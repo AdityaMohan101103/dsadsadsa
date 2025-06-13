@@ -8,6 +8,10 @@ STORE_URLS = [
     "https://www.swiggy.com/restaurants/burger-singh-santoshpur-kolkata-737986"
 ]
 
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0 Safari/537.36'
+}
+
 def get_store_name_from_url(url):
     try:
         parts = url.split('/restaurants/')[1].split('-')
@@ -23,27 +27,28 @@ def get_store_name_from_url(url):
 def scrape_single_store(url):
     offers = []
     try:
-        response = requests.get(url)
+        response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
 
         offer_elements = soup.select("div[data-testid^='offer-card-container']")
 
         if not offer_elements:
-            st.warning(f"No offer elements found for {url}. Please check the selectors.")
-
+            st.warning(f"No offers found for: {url}")
+        
         for el in offer_elements:
-            title_element = el.select_one("div.sc-aXZVg.hsuIwO")
-            desc_element = el.select_one("div.sc-aXZVg.foYDCM")
+            # Extract entire text block and split logically
+            all_text = el.get_text(separator='|', strip=True)
+            parts = all_text.split('|')
 
-            title = title_element.get_text(strip=True) if title_element else "No Title"
-            desc = desc_element.get_text(strip=True) if desc_element else "No Description"
+            title = parts[0] if len(parts) > 0 else "No Title"
+            description = parts[1] if len(parts) > 1 else "No Description"
 
             offers.append({
                 "store_name": get_store_name_from_url(url),
                 "store_url": url,
                 "title": title,
-                "description": desc
+                "description": description
             })
     except Exception as e:
         st.error(f"❌ Error scraping {url}: {e}")
