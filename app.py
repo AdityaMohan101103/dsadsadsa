@@ -26,9 +26,10 @@ def get_store_name_from_url(url):
     except Exception:
         return "Unknown Store"
 
-def create_driver():
+def create_driver(headless=True):
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    if headless:
+        chrome_options.add_argument("--headless")
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -36,18 +37,25 @@ def create_driver():
     driver = webdriver.Chrome(options=chrome_options)
     return driver
 
-def scrape_single_store(url):
+def scrape_single_store(url, headless=True):
     offers = []
     driver = None
     try:
-        driver = create_driver()
+        driver = create_driver(headless=headless)
         driver.get(url)
 
-        # Wait for offer cards to load or timeout after 15 seconds
-        wait = WebDriverWait(driver, 15)
+        wait = WebDriverWait(driver, 20)
+
+        # Scroll down to bottom to force lazy loading
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(3)  # wait for potential lazy loading
+
+        # Wait for offers container presence
         wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")))
 
         offer_elements = driver.find_elements(By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")
+        st.write(f"DEBUG: Found {len(offer_elements)} offer elements on {url}")
+
         if not offer_elements:
             st.warning(f"No offer elements found for {url}. The page layout or selectors might have changed.")
 
@@ -78,15 +86,15 @@ def scrape_single_store(url):
             driver.quit()
     return offers
 
-def parallel_scrape_all_stores(urls, max_threads=2):
-    # Reduced max_threads because multiple selenium browsers consume more resources
+def parallel_scrape_all_stores(urls, max_threads=1, headless=True):
+    # Reduced max_threads due to Selenium resource usage
     total = len(urls)
     all_offers = []
     progress_bar = st.progress(0)
     status_text = st.empty()
 
     with ThreadPoolExecutor(max_workers=max_threads) as executor:
-        future_to_url = {executor.submit(scrape_single_store, url): url for url in urls}
+        future_to_url = {executor.submit(scrape_single_store, url, headless): url for url in urls}
         for idx, future in enumerate(as_completed(future_to_url), start=1):
             url = future_to_url[future]
             try:
@@ -103,18 +111,19 @@ def parallel_scrape_all_stores(urls, max_threads=2):
     return all_offers
 
 def update_google_sheet(offers):
-    # Placeholder for Google Sheets updating logic
     st.info("Google Sheet update feature not implemented. Showing data below.")
     st.dataframe(offers)
 
-st.set_page_config(page_title="Swiggy Discounts Scraper - Selenium", page_icon="🍔", layout="wide")
-st.title("🍔 Swiggy Discounts Scraper - Selenium")
+st.set_page_config(page_title="Swiggy Discounts Scraper - Debug", page_icon="🍔", layout="wide")
+st.title("🍔 Swiggy Discounts Scraper - Debug")
+
+headless_toggle = st.checkbox("Run browser headless (uncheck to show browser window)", value=True)
 
 if st.button("Scrape Discounts"):
     total = len(STORE_URLS)
     st.write(f"Starting scraping 0 out of {total} URLs")
     with st.spinner("Scraping discounts from predefined stores... (this might take a while)"):
-        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=2)
+        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=1, headless=headless_toggle)
 
     if offers:
         update_google_sheet(offers)
@@ -123,5 +132,4 @@ if st.button("Scrape Discounts"):
         st.warning("No discounts found.")
 else:
     st.write("Click the button above to start scraping discounts.")
-
 
