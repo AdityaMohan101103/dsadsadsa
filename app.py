@@ -59,6 +59,10 @@ def scrape_single_store(url, headless=True):
         # Scroll page to bottom multiple times to load dynamic content
         scroll_page(driver, scroll_pause=1, scroll_attempts=5)
 
+        # Debug: Print the page source after scrolling
+        st.write("DEBUG: Page source after scrolling:")
+        st.code(driver.page_source)
+
         # Wait for offers container presence
         wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")))
 
@@ -96,7 +100,6 @@ def scrape_single_store(url, headless=True):
     return offers
 
 def parallel_scrape_all_stores(urls, max_threads=1, headless=True):
-    # Reduced max_threads due to Selenium resource usage
     total = len(urls)
     all_offers = []
     progress_bar = st.progress(0)
@@ -141,5 +144,3 @@ if st.button("Scrape Discounts"):
         st.warning("No discounts found.")
 else:
     st.write("Click the button above to start scraping discounts.")
-
-
