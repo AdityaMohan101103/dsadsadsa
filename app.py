@@ -15,7 +15,7 @@ if st.button("Scrape Offers"):
     else:
         st.info("Scraping offers... Please wait...")
 
-        # Configure Chrome options
+        # Chrome options
         options = Options()
         options.add_argument("--headless")
         options.add_argument("--no-sandbox")
@@ -25,19 +25,16 @@ if st.button("Scrape Offers"):
         options.binary_location = "/usr/bin/chromium"
 
         try:
-            # Launch browser using system-installed ChromeDriver
+            # Initialize Chrome driver
             driver = webdriver.Chrome(options=options)
-
             driver.get(url)
-            time.sleep(5)  # Wait for JS to load
+            time.sleep(5)  # Wait for JS content to load
 
             offers = []
+            offer_containers = driver.find_elements(By.CLASS_NAME, "sc-kbhJrz")
 
-            offer_container = driver.find_elements(By.CLASS_NAME, "sc-kbhJrz")
-            if not offer_container:
-                st.info("No offers found on this page.")
-            else:
-                cards = offer_container[0].find_elements(By.XPATH, ".//div[starts-with(@data-testid, 'offer-card-container-')]")
+            for container in offer_containers:
+                cards = container.find_elements(By.XPATH, ".//div[starts-with(@data-testid, 'offer-card-container-')]")
                 for card in cards:
                     try:
                         offer = card.find_element(By.CLASS_NAME, "hsuIwO").text
@@ -46,12 +43,12 @@ if st.button("Scrape Offers"):
                     except:
                         continue
 
-                if offers:
-                    st.success(f"Found {len(offers)} offer(s):")
-                    for i, offer in enumerate(offers, 1):
-                        st.markdown(f"**{i}. {offer['Offer']}**  \n`{offer['Code']}`")
-                else:
-                    st.info("No offers found in the offer container.")
+            if offers:
+                st.success(f"Found {len(offers)} offer(s):")
+                for i, offer in enumerate(offers, 1):
+                    st.markdown(f"**{i}. {offer['Offer']}**  \n`{offer['Code']}`")
+            else:
+                st.info("No offers found on this page.")
 
         except Exception as e:
             st.error(f"Error: {e}")
