@@ -37,6 +37,16 @@ def create_driver(headless=True):
     driver = webdriver.Chrome(options=chrome_options)
     return driver
 
+def scroll_page(driver, scroll_pause=1, scroll_attempts=5):
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    for i in range(scroll_attempts):
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(scroll_pause)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break
+        last_height = new_height
+
 def scrape_single_store(url, headless=True):
     offers = []
     driver = None
@@ -46,9 +56,8 @@ def scrape_single_store(url, headless=True):
 
         wait = WebDriverWait(driver, 20)
 
-        # Scroll down to bottom to force lazy loading
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(3)  # wait for potential lazy loading
+        # Scroll page to bottom multiple times to load dynamic content
+        scroll_page(driver, scroll_pause=1, scroll_attempts=5)
 
         # Wait for offers container presence
         wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")))
@@ -132,4 +141,5 @@ if st.button("Scrape Discounts"):
         st.warning("No discounts found.")
 else:
     st.write("Click the button above to start scraping discounts.")
+
 
