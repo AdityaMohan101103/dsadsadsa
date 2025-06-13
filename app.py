@@ -1,12 +1,10 @@
 import streamlit as st
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 import time
 
-st.set_page_config(page_title="Swiggy Offers Scraper", layout="centered")
+st.set_page_config(page_title="Swiggy Discounts Scraper", layout="centered")
 st.title("🍔 Swiggy Discounts Scraper")
 
 url = st.text_input("Enter Swiggy restaurant URL:")
@@ -15,18 +13,23 @@ if st.button("Scrape Offers"):
     if not url:
         st.warning("Please enter a valid Swiggy restaurant URL.")
     else:
-        st.info("Scraping offers... Please wait.")
+        st.info("Scraping offers... Please wait...")
 
+        # Configure Chrome options
         options = Options()
-        options.add_argument('--headless')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox')
-        options.add_argument("--window-size=1920,1080")
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920x1080")
+        options.binary_location = "/usr/bin/chromium"
 
         try:
+            # Launch browser using system-installed ChromeDriver
+            driver = webdriver.Chrome(options=options)
+
             driver.get(url)
-            time.sleep(5)  # Let the page fully load
+            time.sleep(5)  # Wait for JS to load
 
             offers = []
 
