@@ -1,25 +1,12 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import time
 
 STORE_URLS = [
     "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
     "https://www.swiggy.com/restaurants/burger-singh-santoshpur-kolkata-737986"
-    # Add more URLs as needed
 ]
-
-def get_driver():
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
 
 def get_store_name_from_url(url):
     try:
@@ -36,21 +23,25 @@ def get_store_name_from_url(url):
 def scrape_single_store(url):
     offers = []
     try:
-        driver = get_driver()
-        driver.get(url)
-        time.sleep(5)  # Wait for JS content to load
-
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        driver.quit()
+        headers = {
+            "User-Agent": "Mozilla/5.0"
+        }
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
 
         offer_elements = soup.select("div[data-testid^='offer-card-container']")
+
+        if not offer_elements:
+            st.warning(f"No offers found for {url}. Check if content is loaded via JavaScript.")
+
         for el in offer_elements:
-            title_el = el.select_one("div.sc-aXZVg.hsuIwO")
-            desc_el = el.select_one("div.sc-aXZVg.foYDCM")
-
-            title = title_el.get_text(strip=True) if title_el else "No Title"
-            desc = desc_el.get_text(strip=True) if desc_el else "No Description"
-
+            title_element = el.select_one("div[class*='hsuIwO']")
+            desc_element = el.select_one("div[class*='foYDCM']")
+            
+            title = title_element.get_text(strip=True) if title_element else "No Title"
+            desc = desc_element.get_text(strip=True) if desc_element else "No Description"
+            
             offers.append({
                 "store_name": get_store_name_from_url(url),
                 "store_url": url,
@@ -61,7 +52,7 @@ def scrape_single_store(url):
         st.error(f"❌ Error scraping {url}: {e}")
     return offers
 
-def parallel_scrape_all_stores(urls, max_threads=3):
+def parallel_scrape_all_stores(urls, max_threads=5):
     total = len(urls)
     all_offers = []
     progress_bar = st.progress(0)
@@ -95,7 +86,7 @@ if st.button("Scrape Discounts"):
     total = len(STORE_URLS)
     st.write(f"Starting scraping 0 out of {total} URLs")
     with st.spinner("Scraping discounts from predefined stores..."):
-        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=2)
+        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=5)
 
     if offers:
         update_google_sheet(offers)
