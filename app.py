@@ -1,18 +1,20 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+import requests
+from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from selenium.common.exceptions import TimeoutException, WebDriverException
-import time
 
 STORE_URLS = [
     "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
     "https://www.swiggy.com/restaurants/burger-singh-santoshpur-kolkata-737986"
     # Add more URLs as needed
 ]
+
+HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/114.0.0.0 Safari/537.36"),
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 def get_store_name_from_url(url):
     try:
@@ -26,61 +28,24 @@ def get_store_name_from_url(url):
     except Exception:
         return "Unknown Store"
 
-def create_driver(headless=True):
-    chrome_options = Options()
-    if headless:
-        chrome_options.add_argument("--headless")
-    chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=1920,1080")
-    driver = webdriver.Chrome(options=chrome_options)
-    return driver
-
-def scroll_page(driver, scroll_pause=1, scroll_attempts=5):
-    last_height = driver.execute_script("return document.body.scrollHeight")
-    for i in range(scroll_attempts):
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(scroll_pause)
-        new_height = driver.execute_script("return document.body.scrollHeight")
-        if new_height == last_height:
-            break
-        last_height = new_height
-
-def scrape_single_store(url, headless=True):
+def scrape_single_store(url):
     offers = []
-    driver = None
     try:
-        driver = create_driver(headless=headless)
-        driver.get(url)
+        response = requests.get(url, headers=HEADERS, timeout=15)
+        response.raise_for_status()
 
-        wait = WebDriverWait(driver, 20)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Scroll page to bottom multiple times to load dynamic content
-        scroll_page(driver, scroll_pause=1, scroll_attempts=5)
-
-        # Debug: Print the page source after scrolling
-        st.write("DEBUG: Page source after scrolling:")
-        st.code(driver.page_source)
-
-        # Wait for offers container presence
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")))
-
-        offer_elements = driver.find_elements(By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")
-        st.write(f"DEBUG: Found {len(offer_elements)} offer elements on {url}")
-
+        offer_elements = soup.select("div[data-testid^='offer-card-container']")
         if not offer_elements:
-            st.warning(f"No offer elements found for {url}. The page layout or selectors might have changed.")
+            st.warning(f"No offer elements found for {url}. The page may require JavaScript to render offers.")
 
         for el in offer_elements:
-            try:
-                title_element = el.find_element(By.CSS_SELECTOR, "div.sc-aXZVg.hsuIwO")
-                desc_element = el.find_element(By.CSS_SELECTOR, "div.sc-aXZVg.foYDCM")
-                title = title_element.text.strip() if title_element else "No Title"
-                desc = desc_element.text.strip() if desc_element else "No Description"
-            except Exception:
-                title = "No Title"
-                desc = "No Description"
+            title_element = el.select_one("div.sc-aXZVg.hsuIwO")
+            desc_element = el.select_one("div.sc-aXZVg.foYDCM")
+
+            title = title_element.get_text(strip=True) if title_element else "No Title"
+            desc = desc_element.get_text(strip=True) if desc_element else "No Description"
 
             offers.append({
                 "store_name": get_store_name_from_url(url),
@@ -88,25 +53,22 @@ def scrape_single_store(url, headless=True):
                 "title": title,
                 "description": desc
             })
-    except TimeoutException:
-        st.error(f"❌ Timeout while loading offers on {url}")
-    except WebDriverException as e:
-        st.error(f"❌ Selenium WebDriver error on {url}: {e}")
+
+    except requests.RequestException as e:
+        st.error(f"❌ HTTP error scraping {url}: {e}")
     except Exception as e:
         st.error(f"❌ Unexpected error scraping {url}: {e}")
-    finally:
-        if driver:
-            driver.quit()
+
     return offers
 
-def parallel_scrape_all_stores(urls, max_threads=1, headless=True):
+def parallel_scrape_all_stores(urls, max_threads=5):
     total = len(urls)
     all_offers = []
     progress_bar = st.progress(0)
     status_text = st.empty()
 
     with ThreadPoolExecutor(max_workers=max_threads) as executor:
-        future_to_url = {executor.submit(scrape_single_store, url, headless): url for url in urls}
+        future_to_url = {executor.submit(scrape_single_store, url): url for url in urls}
         for idx, future in enumerate(as_completed(future_to_url), start=1):
             url = future_to_url[future]
             try:
@@ -123,24 +85,25 @@ def parallel_scrape_all_stores(urls, max_threads=1, headless=True):
     return all_offers
 
 def update_google_sheet(offers):
+    # Placeholder for Google Sheets updating logic
     st.info("Google Sheet update feature not implemented. Showing data below.")
     st.dataframe(offers)
 
-st.set_page_config(page_title="Swiggy Discounts Scraper - Debug", page_icon="🍔", layout="wide")
-st.title("🍔 Swiggy Discounts Scraper - Debug")
-
-headless_toggle = st.checkbox("Run browser headless (uncheck to show browser window)", value=True)
+st.set_page_config(page_title="Swiggy Discounts Scraper - BeautifulSoup", page_icon="🍔", layout="wide")
+st.title("🍔 Swiggy Discounts Scraper - BeautifulSoup")
 
 if st.button("Scrape Discounts"):
     total = len(STORE_URLS)
     st.write(f"Starting scraping 0 out of {total} URLs")
-    with st.spinner("Scraping discounts from predefined stores... (this might take a while)"):
-        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=1, headless=headless_toggle)
+    with st.spinner("Scraping discounts from predefined stores..."):
+        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=5)
 
     if offers:
         update_google_sheet(offers)
         st.success(f"✅ {len(offers)} discounts scraped.")
     else:
-        st.warning("No discounts found.")
+        st.warning("No discounts found. This may be because the page requires JavaScript to render offers.")
 else:
     st.write("Click the button above to start scraping discounts.")
+
+
