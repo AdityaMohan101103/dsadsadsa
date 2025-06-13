@@ -1,18 +1,13 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-import json
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 STORE_URLS = [
     "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
     "https://www.swiggy.com/restaurants/burger-singh-santoshpur-kolkata-737986"
+    # add more URLs as needed
 ]
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
 
 def get_store_name_from_url(url):
     try:
@@ -23,47 +18,33 @@ def get_store_name_from_url(url):
                 break
             name_parts.append(part)
         return ' '.join(name_parts).title()
-    except:
+    except Exception:
         return "Unknown Store"
-
-def extract_offers_from_script(html_text):
-    try:
-        match = re.search(r"window\.__PRELOADED_STATE__\s*=\s*(\{.*?\})\s*;\s*</script>", html_text, re.DOTALL)
-        if not match:
-            return []
-
-        data_json = match.group(1)
-        data = json.loads(data_json)
-
-        offers = []
-        cards = data.get("offers", {}).get("data", {}).get("cards", [])
-        for card in cards:
-            info = card.get("card", {}).get("card", {})
-            title = info.get("header", "No Title")
-            description = info.get("couponCode", "No Description")
-            if title:
-                offers.append({
-                    "title": title,
-                    "description": f"USE {description}" if description else ""
-                })
-        return offers
-    except Exception as e:
-        print("Error extracting offers from JSON:", e)
-        return []
 
 def scrape_single_store(url):
     offers = []
     try:
-        response = requests.get(url, headers=HEADERS)
+        response = requests.get(url)
         response.raise_for_status()
-        store_offers = extract_offers_from_script(response.text)
-        store_name = get_store_name_from_url(url)
-        for offer in store_offers:
-            offer.update({
-                "store_name": store_name,
-                "store_url": url
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        offer_elements = soup.select("div[data-testid^='offer-card-container']")
+        if not offer_elements:
+            st.warning(f"No offer elements found for {url}. The page layout or selectors might have changed.")
+
+        for el in offer_elements:
+            title_element = el.select_one("div.sc-aXZVg.hsuIwO")
+            desc_element = el.select_one("div.sc-aXZVg.foYDCM")
+
+            title = title_element.get_text(strip=True) if title_element else "No Title"
+            desc = desc_element.get_text(strip=True) if desc_element else "No Description"
+
+            offers.append({
+                "store_name": get_store_name_from_url(url),
+                "store_url": url,
+                "title": title,
+                "description": desc
             })
-        offers.extend(store_offers)
     except Exception as e:
         st.error(f"❌ Error scraping {url}: {e}")
     return offers
@@ -92,10 +73,9 @@ def parallel_scrape_all_stores(urls, max_threads=5):
     return all_offers
 
 def update_google_sheet(offers):
-    if offers:
-        st.dataframe(offers)
-    else:
-        st.info("No offers to display.")
+    # Placeholder for Google Sheets updating logic
+    st.info("Google Sheet update feature not implemented. Showing data below.")
+    st.dataframe(offers)
 
 st.set_page_config(page_title="Swiggy Discounts Scraper", page_icon="🍔", layout="wide")
 st.title("🍔 Swiggy Discounts Scraper")
@@ -113,3 +93,4 @@ if st.button("Scrape Discounts"):
         st.warning("No discounts found.")
 else:
     st.write("Click the button above to start scraping discounts.")
+
