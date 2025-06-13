@@ -11,13 +11,13 @@ STORE_URLS = [
     "https://www.swiggy.com/restaurants/burger-singh-santoshpur-kolkata-737986"
 ]
 
-st.set_page_config(page_title="Swiggy Offers Multi-Scraper", layout="centered")
+st.set_page_config(page_title="Swiggy Offers Scraper", layout="centered")
 st.title("🍔 Swiggy Outlet-wise Offers Scraper")
 
 if st.button("Scrape Offers from All Outlets"):
     st.info("Launching browser... Please wait...")
 
-    # Chrome options
+    # Chrome options for headless browser
     options = Options()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -35,10 +35,11 @@ if st.button("Scrape Offers from All Outlets"):
             driver.get(url)
             time.sleep(5)
 
-            # Extract outlet name from the correct div
+            # Extract outlet name reliably
             try:
-                outlet_elem = driver.find_element(By.CLASS_NAME, "oypwP")
-                outlet_name = outlet_elem.text.strip()
+                outlet_label = driver.find_element(By.XPATH, '//div[text()="Outlet"]')
+                outlet_name_elem = outlet_label.find_element(By.XPATH, './following-sibling::div')
+                outlet_name = outlet_name_elem.text.strip()
             except:
                 outlet_name = "Unknown Outlet"
 
@@ -48,7 +49,7 @@ if st.button("Scrape Offers from All Outlets"):
             offers_found = False
 
             for container in offer_containers:
-                cards = container.find_elements(By.XPATH, ".//div[starts-with(@data-testid, 'offer-card-container-')]")
+                cards = container.find_elements(By.XPATH, './/div[starts-with(@data-testid, "offer-card-container-")]')
                 for card in cards:
                     try:
                         offer = card.find_element(By.CLASS_NAME, "hsuIwO").text
@@ -70,20 +71,20 @@ if st.button("Scrape Offers from All Outlets"):
             st.markdown("---")
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error occurred: {e}")
 
     finally:
         driver.quit()
 
-    # Display CSV download
+    # Show downloadable CSV
     if all_offers:
         df = pd.DataFrame(all_offers)
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Download All Offers as CSV",
+            label="📥 Download CSV of All Offers",
             data=csv,
             file_name="swiggy_offers.csv",
             mime='text/csv'
         )
     else:
-        st.info("No offers found for any of the outlets.")
+        st.warning("No offers found for any outlet.")
