@@ -1,6 +1,8 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
+import json
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 STORE_URLS = [
@@ -9,7 +11,7 @@ STORE_URLS = [
 ]
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0 Safari/537.36'
+    "User-Agent": "Mozilla/5.0"
 }
 
 def get_store_name_from_url(url):
@@ -21,35 +23,47 @@ def get_store_name_from_url(url):
                 break
             name_parts.append(part)
         return ' '.join(name_parts).title()
-    except Exception:
+    except:
         return "Unknown Store"
+
+def extract_offers_from_script(html_text):
+    try:
+        match = re.search(r"window\.__PRELOADED_STATE__\s*=\s*(\{.*?\})\s*;\s*</script>", html_text, re.DOTALL)
+        if not match:
+            return []
+
+        data_json = match.group(1)
+        data = json.loads(data_json)
+
+        offers = []
+        cards = data.get("offers", {}).get("data", {}).get("cards", [])
+        for card in cards:
+            info = card.get("card", {}).get("card", {})
+            title = info.get("header", "No Title")
+            description = info.get("couponCode", "No Description")
+            if title:
+                offers.append({
+                    "title": title,
+                    "description": f"USE {description}" if description else ""
+                })
+        return offers
+    except Exception as e:
+        print("Error extracting offers from JSON:", e)
+        return []
 
 def scrape_single_store(url):
     offers = []
     try:
         response = requests.get(url, headers=HEADERS)
         response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        offer_elements = soup.select("div[data-testid^='offer-card-container']")
-
-        if not offer_elements:
-            st.warning(f"No offers found for: {url}")
-        
-        for el in offer_elements:
-            # Extract entire text block and split logically
-            all_text = el.get_text(separator='|', strip=True)
-            parts = all_text.split('|')
-
-            title = parts[0] if len(parts) > 0 else "No Title"
-            description = parts[1] if len(parts) > 1 else "No Description"
-
-            offers.append({
-                "store_name": get_store_name_from_url(url),
-                "store_url": url,
-                "title": title,
-                "description": description
+        store_offers = extract_offers_from_script(response.text)
+        store_name = get_store_name_from_url(url)
+        for offer in store_offers:
+            offer.update({
+                "store_name": store_name,
+                "store_url": url
             })
+        offers.extend(store_offers)
     except Exception as e:
         st.error(f"❌ Error scraping {url}: {e}")
     return offers
