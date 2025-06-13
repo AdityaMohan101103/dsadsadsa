@@ -4,9 +4,8 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 import pandas as pd
 import time
-from urllib.parse import urlparse
 
-# Predefined list of Swiggy restaurant URLs
+# Predefined Swiggy outlet URLs
 STORE_URLS = [
     "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
     "https://www.swiggy.com/restaurants/burger-singh-santoshpur-kolkata-737986"
@@ -36,11 +35,12 @@ if st.button("Scrape Offers from All Outlets"):
             driver.get(url)
             time.sleep(5)
 
-            # Try to extract outlet name from page title
-            outlet_name = driver.title.split('|')[0].strip()
-            if not outlet_name:
-                # fallback to extracting from URL
-                outlet_name = url.split("/")[-1]
+            # Extract outlet name from the correct div
+            try:
+                outlet_elem = driver.find_element(By.CLASS_NAME, "oypwP")
+                outlet_name = outlet_elem.text.strip()
+            except:
+                outlet_name = "Unknown Outlet"
 
             st.markdown(f"### 🏪 {outlet_name}")
 
@@ -75,7 +75,7 @@ if st.button("Scrape Offers from All Outlets"):
     finally:
         driver.quit()
 
-    # If offers were found, show download button
+    # Display CSV download
     if all_offers:
         df = pd.DataFrame(all_offers)
         csv = df.to_csv(index=False).encode('utf-8')
