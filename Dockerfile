@@ -1,26 +1,26 @@
 FROM python:3.10-slim
 
-# Install system dependencies
+# Install Chromium and matching ChromeDriver
 RUN apt-get update && apt-get install -y \
-    curl unzip chromium-driver chromium \
+    chromium chromium-driver curl unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables for Chrome
 ENV CHROME_BIN=/usr/bin/chromium
-ENV PATH="$PATH:/usr/bin"
+ENV CHROMEDRIVER_PATH=/usr/lib/chromium/chromedriver
+ENV PATH="${CHROMEDRIVER_PATH}:${PATH}"
 
 # Set working directory
 WORKDIR /app
 
-# Copy files
+# Copy project files
 COPY . .
 
-# Install Python dependencies
+# Install Python packages
 RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+RUN pip install streamlit selenium
 
-# Streamlit runs on port 7860 by default
+# Streamlit port
 EXPOSE 7860
 
-# Run Streamlit app
+# Start the Streamlit app
 CMD ["streamlit", "run", "app.py", "--server.port=7860", "--server.address=0.0.0.0"]
