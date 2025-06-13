@@ -8,7 +8,7 @@ import csv
 
 # Swiggy store URLs
 STORE_URLS = [
-    "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
+   "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
     "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-stational-club-durga-mandir-purnea-purnea-698848",
     "https://www.swiggy.com/restaurants/burger-singh-gaya-city-gaya-701361",
     "https://www.swiggy.com/restaurants/burger-singh-kankarbagh-patna-745653",
@@ -153,7 +153,7 @@ STORE_URLS = [
 
 st.set_page_config(page_title="🍔 Swiggy Offers", layout="centered")
 
-# Stylish CSS
+# Custom CSS for layout and progress bar
 st.markdown("""
     <style>
         body {
@@ -171,33 +171,56 @@ st.markdown("""
             color: #666;
             margin-bottom: 30px;
         }
+        .progress-container {
+            width: 100%;
+            background-color: #eee;
+            border-radius: 25px;
+            margin: 1.5rem 0;
+        }
+        .progress-bar {
+            height: 20px;
+            border-radius: 25px;
+            background-color: #ff914d;
+            width: 0%;
+            text-align: center;
+            color: white;
+            line-height: 20px;
+            font-size: 12px;
+            transition: width 0.4s ease;
+        }
         .download-btn {
             display: flex;
             justify-content: center;
             margin-top: 2rem;
         }
-        .stSlider > div {
-            padding-bottom: 2rem;
-        }
     </style>
 """, unsafe_allow_html=True)
 
+# Header
 st.markdown('<div class="center-title">🍔 Swiggy Outlet Offers Scraper</div>', unsafe_allow_html=True)
 st.markdown('<div class="subtext">Scraping offers from predefined Swiggy restaurant URLs...</div>', unsafe_allow_html=True)
 
-# Chrome options setup
+# Progress bar HTML block
+progress_bar_placeholder = st.empty()
+
+def render_progress_bar(progress, total):
+    percentage = int((progress / total) * 100)
+    bar_html = f"""
+        <div class="progress-container">
+            <div class="progress-bar" style="width:{percentage}%;">{percentage}%</div>
+        </div>
+    """
+    progress_bar_placeholder.markdown(bar_html, unsafe_allow_html=True)
+
+# Set up headless Chrome
 options = Options()
 options.add_argument("--headless")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-
 service = Service("/usr/bin/chromedriver")
 driver = webdriver.Chrome(service=service, options=options)
 
 data = []
-progress = st.slider("Scraping Progress", 0, len(STORE_URLS), 0, disabled=True, label_visibility="visible")
-progress_slot = st.empty()
-
 for idx, url in enumerate(STORE_URLS):
     driver.get(url)
     time.sleep(5)
@@ -224,18 +247,18 @@ for idx, url in enumerate(STORE_URLS):
     for offer in offers:
         data.append([outlet_name, url, offer])
 
-    progress_slot.slider("Scraping Progress", 0, len(STORE_URLS), idx + 1, disabled=True)
+    render_progress_bar(idx + 1, len(STORE_URLS))
 
 driver.quit()
 
-# Write CSV
+# Write to CSV
 csv_filename = "swiggy_offers.csv"
 with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
     writer = csv.writer(file)
     writer.writerow(["Outlet Name", "URL", "Offer"])
     writer.writerows(data)
 
-# Download CSV
+# Show download button
 st.markdown('<div class="download-btn">', unsafe_allow_html=True)
 with open(csv_filename, "rb") as f:
     st.download_button("📥 Download All Offers as CSV", f, file_name="swiggy_offers.csv", mime="text/csv")
