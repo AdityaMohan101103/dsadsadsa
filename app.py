@@ -8,7 +8,7 @@ import csv
 
 # Swiggy store URLs
 STORE_URLS = [
-   "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
+      "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
     "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-stational-club-durga-mandir-purnea-purnea-698848",
     "https://www.swiggy.com/restaurants/burger-singh-gaya-city-gaya-701361",
     "https://www.swiggy.com/restaurants/burger-singh-kankarbagh-patna-745653",
@@ -153,16 +153,15 @@ STORE_URLS = [
 
 st.set_page_config(page_title="🍔 Swiggy Offers", layout="centered")
 
-# Custom CSS for layout and progress bar
+# Custom CSS for styling
 st.markdown("""
     <style>
         body {
             background-color: #f6f9fc;
-            font-family: 'Segoe UI', sans-serif;
         }
         .center-title {
             text-align: center;
-            font-size: 2rem;
+            font-size: 2.2rem;
             font-weight: 600;
             color: #333;
         }
@@ -193,73 +192,89 @@ st.markdown("""
             justify-content: center;
             margin-top: 2rem;
         }
+        .stButton > button {
+            width: 100%;
+            font-size: 1.1rem;
+            padding: 0.75rem;
+            background-color: #ff914d;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            transition: 0.3s ease;
+        }
+        .stButton > button:hover {
+            background-color: #ff732d;
+            transform: scale(1.02);
+        }
     </style>
 """, unsafe_allow_html=True)
 
 # Header
 st.markdown('<div class="center-title">🍔 Swiggy Outlet Offers Scraper</div>', unsafe_allow_html=True)
-st.markdown('<div class="subtext">Scraping offers from predefined Swiggy restaurant URLs...</div>', unsafe_allow_html=True)
+st.markdown('<div class="subtext">Click the button to begin scraping Swiggy outlet offers.</div>', unsafe_allow_html=True)
 
-# Progress bar HTML block
-progress_bar_placeholder = st.empty()
+start = st.button("🚀 Start Scraping")
 
-def render_progress_bar(progress, total):
-    percentage = int((progress / total) * 100)
-    bar_html = f"""
-        <div class="progress-container">
-            <div class="progress-bar" style="width:{percentage}%;">{percentage}%</div>
-        </div>
-    """
-    progress_bar_placeholder.markdown(bar_html, unsafe_allow_html=True)
+if start:
+    progress_bar_placeholder = st.empty()
 
-# Set up headless Chrome
-options = Options()
-options.add_argument("--headless")
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-service = Service("/usr/bin/chromedriver")
-driver = webdriver.Chrome(service=service, options=options)
+    def render_progress_bar(progress, total):
+        percent = int((progress / total) * 100)
+        html = f"""
+            <div class="progress-container">
+                <div class="progress-bar" style="width:{percent}%;">{percent}%</div>
+            </div>
+        """
+        progress_bar_placeholder.markdown(html, unsafe_allow_html=True)
 
-data = []
-for idx, url in enumerate(STORE_URLS):
-    driver.get(url)
-    time.sleep(5)
+    # Set up Selenium
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    service = Service("/usr/bin/chromedriver")
+    driver = webdriver.Chrome(service=service, options=options)
 
-    try:
-        outlet_name = driver.find_element(By.CLASS_NAME, "oypwP").text
-    except:
-        outlet_name = "Unknown Outlet"
+    data = []
+    for idx, url in enumerate(STORE_URLS):
+        driver.get(url)
+        time.sleep(5)
 
-    offers = []
-    offer_blocks = driver.find_elements(By.CLASS_NAME, "gPgEKT")
-    for block in offer_blocks:
         try:
-            title = block.find_element(By.CLASS_NAME, "hsuIwO").text
-            code = block.find_element(By.CLASS_NAME, "foYDCM").text
-            full_offer = f"{title} - USE {code}"
-            offers.append(full_offer)
+            outlet_name = driver.find_element(By.CLASS_NAME, "oypwP").text
         except:
-            continue
+            outlet_name = "Unknown Outlet"
 
-    if not offers:
-        offers = ["No offers"]
+        offers = []
+        offer_blocks = driver.find_elements(By.CLASS_NAME, "gPgEKT")
+        for block in offer_blocks:
+            try:
+                title = block.find_element(By.CLASS_NAME, "hsuIwO").text
+                code = block.find_element(By.CLASS_NAME, "foYDCM").text
+                full_offer = f"{title} - USE {code}"
+                offers.append(full_offer)
+            except:
+                continue
 
-    for offer in offers:
-        data.append([outlet_name, url, offer])
+        if not offers:
+            offers = ["No offers"]
 
-    render_progress_bar(idx + 1, len(STORE_URLS))
+        for offer in offers:
+            data.append([outlet_name, url, offer])
 
-driver.quit()
+        render_progress_bar(idx + 1, len(STORE_URLS))
 
-# Write to CSV
-csv_filename = "swiggy_offers.csv"
-with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
-    writer = csv.writer(file)
-    writer.writerow(["Outlet Name", "URL", "Offer"])
-    writer.writerows(data)
+    driver.quit()
 
-# Show download button
-st.markdown('<div class="download-btn">', unsafe_allow_html=True)
-with open(csv_filename, "rb") as f:
-    st.download_button("📥 Download All Offers as CSV", f, file_name="swiggy_offers.csv", mime="text/csv")
-st.markdown('</div>', unsafe_allow_html=True)
+    # Write CSV
+    csv_filename = "swiggy_offers.csv"
+    with open(csv_filename, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Outlet Name", "URL", "Offer"])
+        writer.writerows(data)
+
+    # Download button
+    st.markdown('<div class="download-btn">', unsafe_allow_html=True)
+    with open(csv_filename, "rb") as f:
+        st.download_button("📥 Download All Offers as CSV", f, file_name="swiggy_offers.csv", mime="text/csv")
+    st.markdown('</div>', unsafe_allow_html=True)
