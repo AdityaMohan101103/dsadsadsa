@@ -1,11 +1,17 @@
 import streamlit as st
-import requests
-from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from selenium.common.exceptions import TimeoutException, WebDriverException
+import time
 
 STORE_URLS = [
     "https://www.swiggy.com/restaurants/burger-singh-big-punjabi-burgers-ganeshguri-guwahati-579784",
     "https://www.swiggy.com/restaurants/burger-singh-santoshpur-kolkata-737986"
+    # Add more URLs as needed
 ]
 
 def get_store_name_from_url(url):
@@ -20,39 +26,60 @@ def get_store_name_from_url(url):
     except Exception:
         return "Unknown Store"
 
+def create_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
+
 def scrape_single_store(url):
     offers = []
+    driver = None
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
+        driver = create_driver()
+        driver.get(url)
 
-        offer_elements = soup.select("div[data-testid^='offer-card-container']")
+        # Wait for offer cards to load or timeout after 15 seconds
+        wait = WebDriverWait(driver, 15)
+        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")))
 
+        offer_elements = driver.find_elements(By.CSS_SELECTOR, "div[data-testid^='offer-card-container']")
         if not offer_elements:
-            st.warning(f"No offers found for {url}. Check if content is loaded via JavaScript.")
+            st.warning(f"No offer elements found for {url}. The page layout or selectors might have changed.")
 
         for el in offer_elements:
-            title_element = el.select_one("div[class*='hsuIwO']")
-            desc_element = el.select_one("div[class*='foYDCM']")
-            
-            title = title_element.get_text(strip=True) if title_element else "No Title"
-            desc = desc_element.get_text(strip=True) if desc_element else "No Description"
-            
+            try:
+                title_element = el.find_element(By.CSS_SELECTOR, "div.sc-aXZVg.hsuIwO")
+                desc_element = el.find_element(By.CSS_SELECTOR, "div.sc-aXZVg.foYDCM")
+                title = title_element.text.strip() if title_element else "No Title"
+                desc = desc_element.text.strip() if desc_element else "No Description"
+            except Exception:
+                title = "No Title"
+                desc = "No Description"
+
             offers.append({
                 "store_name": get_store_name_from_url(url),
                 "store_url": url,
                 "title": title,
                 "description": desc
             })
+    except TimeoutException:
+        st.error(f"❌ Timeout while loading offers on {url}")
+    except WebDriverException as e:
+        st.error(f"❌ Selenium WebDriver error on {url}: {e}")
     except Exception as e:
-        st.error(f"❌ Error scraping {url}: {e}")
+        st.error(f"❌ Unexpected error scraping {url}: {e}")
+    finally:
+        if driver:
+            driver.quit()
     return offers
 
-def parallel_scrape_all_stores(urls, max_threads=5):
+def parallel_scrape_all_stores(urls, max_threads=2):
+    # Reduced max_threads because multiple selenium browsers consume more resources
     total = len(urls)
     all_offers = []
     progress_bar = st.progress(0)
@@ -76,17 +103,18 @@ def parallel_scrape_all_stores(urls, max_threads=5):
     return all_offers
 
 def update_google_sheet(offers):
+    # Placeholder for Google Sheets updating logic
     st.info("Google Sheet update feature not implemented. Showing data below.")
     st.dataframe(offers)
 
-st.set_page_config(page_title="Swiggy Discounts Scraper", page_icon="🍔", layout="wide")
-st.title("🍔 Swiggy Discounts Scraper")
+st.set_page_config(page_title="Swiggy Discounts Scraper - Selenium", page_icon="🍔", layout="wide")
+st.title("🍔 Swiggy Discounts Scraper - Selenium")
 
 if st.button("Scrape Discounts"):
     total = len(STORE_URLS)
     st.write(f"Starting scraping 0 out of {total} URLs")
-    with st.spinner("Scraping discounts from predefined stores..."):
-        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=5)
+    with st.spinner("Scraping discounts from predefined stores... (this might take a while)"):
+        offers = parallel_scrape_all_stores(STORE_URLS, max_threads=2)
 
     if offers:
         update_google_sheet(offers)
@@ -95,3 +123,5 @@ if st.button("Scrape Discounts"):
         st.warning("No discounts found.")
 else:
     st.write("Click the button above to start scraping discounts.")
+
+
